@@ -48,3 +48,8 @@ Error code: bookmarknotfound
 * line 593 of /public/blocks/exaport/lib/common.php: block_exaport\common\moodle_exception thrown
 * line 41 of /public/blocks/exaport/shared_item.php: call to block_exaport\common\print_error()
 
+[21-Aug-2026 10:28:26 Europe/London] Default exception handler: Bookmark not found Debug: 
+Error code: bookmarknotfound
+* line 593 of /public/blocks/exaport/lib/common.php: block_exaport\common\moodle_exception thrown
+* line 41 of /public/blocks/exaport/shared_item.php: call to block_exaport\common\print_error()
+
