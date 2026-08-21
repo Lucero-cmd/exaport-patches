@@ -1,0 +1,126 @@
+<?php
+// This file is part of Exabis Eportfolio (extension for Moodle)
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// (c) 2016 GTN - Global Training Network GmbH <office@gtn-solutions.com>.
+
+defined('MOODLE_INTERNAL') || die();
+
+require(__DIR__ . '/inc.php');
+
+class block_exaport extends block_list {
+
+    public function init() {
+        $this->title = get_string('blocktitle', 'block_exaport');
+    }
+
+    public function instance_allow_multiple() {
+        return false;
+    }
+
+    public function instance_allow_config() {
+        return false;
+    }
+
+    public function has_config() {
+        return true;
+    }
+
+    public function get_content() {
+        global $CFG, $COURSE, $OUTPUT;
+
+        $context = context_system::instance();
+        if (!has_capability('block/exaport:use', $context)) {
+            $this->content = '';
+            return $this->content;
+        }
+
+        if ($this->content !== null) {
+            return $this->content;
+        }
+
+        if (empty($this->instance)) {
+            $this->content = '';
+            return $this->content;
+        }
+
+        $this->content = new stdClass;
+        $this->content->items = array();
+        $this->content->icons = array();
+        $this->content->footer = '';
+
+        $output = block_exaport_get_renderer();
+
+        if (!empty($CFG->block_exaport_enable_whyeportfolio)
+                && get_string("whyEportfolio_description", "block_exaport") !== '[[whyEportfolio_description]]') {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/whyeportfolio.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('whyEportfolio') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/whyeportfolio.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('whyEportfolio') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_resume)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/resume.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('resume_my') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/resume.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('resume_my') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_myportfolio)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/my_portfolio.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('myportfoliotitle') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/view_items.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('myportfolio') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_views)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/myviews.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('views') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/views_list.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('views') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_shared_views)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/shared_views.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('shared_views') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/shared_views.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('shared_views') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_shared_categories)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/shared_categories.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('shared_categories') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/shared_categories.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('shared_categories') . '</a>';
+        }
+
+        if (!empty($CFG->block_exaport_enable_importexport)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/importexport.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('importexport') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/importexport.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('importexport') . '</a>';
+        }
+
+        // Add category distribution link for teachers.
+        $coursecontext = context_course::instance($COURSE->id);
+        if (!empty($CFG->block_exaport_enable_category_distribution) && has_capability('block/exaport:distributecategories', $coursecontext)) {
+            $icon = '<img src="' . $CFG->wwwroot . '/blocks/exaport/pix/shared_categories.svg' . '" width="16" height="16" class="icon" alt="" />';
+            $this->content->items[] = '<a title="' . block_exaport_get_string('category_distribution') . '" ' .
+                ' href="' . $CFG->wwwroot . '/blocks/exaport/category_distribution.php?courseid=' . $COURSE->id . '">' .
+                $icon . block_exaport_get_string('category_distribution') . '</a>';
+        }
+
+        return $this->content;
+    }
+}
