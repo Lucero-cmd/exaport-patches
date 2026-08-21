@@ -1542,6 +1542,7 @@ function block_exaport_get_course_teachers_by_courseid($courseid, $exceptmyself 
     $editingteacherrole = $DB->get_record('role', ['shortname' => 'editingteacher']);
     $teacherrole = $DB->get_record('role', ['shortname' => 'teacher']);
     $managerrole = $DB->get_record('role', ['shortname' => 'manager']); // exacompteacher capability is assigned to to managers also anyways, but exacomp is not always installed
+    $companymanagerrole = $DB->get_record('role', ['shortname' => 'companymanager']); // local: company managers should see their company's teachers too
 
     $roleids = [];
     if ($editingteacherrole) {
@@ -1552,6 +1553,9 @@ function block_exaport_get_course_teachers_by_courseid($courseid, $exceptmyself 
     }
     if ($managerrole) {
         $roleids[] = $managerrole->id;
+    }
+    if ($companymanagerrole) {
+	$roleids[] = $companymanagerrole->id;
     }
 
     if (empty($roleids)) {
@@ -1644,6 +1648,7 @@ function block_exaport_user_is_teacher($userid = null) {
     // Get teacher roles by shortname (not hardcoded IDs).
     $editingteacherrole = $DB->get_record('role', ['shortname' => 'editingteacher']);
     $teacherrole = $DB->get_record('role', ['shortname' => 'teacher']);
+    $companymanagerrole = $DB->get_record('role', ['shortname' => 'companymanager']);
 
     $roleids = [];
     if ($editingteacherrole) {
@@ -1651,6 +1656,9 @@ function block_exaport_user_is_teacher($userid = null) {
     }
     if ($teacherrole) {
         $roleids[] = $teacherrole->id;
+    }
+    if ($companymanagerrole) {
+	$roleids[] = $companymanagerrole->id;
     }
 
     if (empty($roleids)) {
@@ -1682,6 +1690,7 @@ function block_exaport_get_students_for_teacher($userid = null, $courseid = 0) {
     // Get teacher roles by shortname (not hardcoded IDs).
     $editingteacherrole = $DB->get_record('role', ['shortname' => 'editingteacher']);
     $teacherrole = $DB->get_record('role', ['shortname' => 'teacher']);
+    $companymanagerrole = $DB->get_record('role', ['shortname' => 'companymanager']);
 
     $teacherroleids = [];
     if ($editingteacherrole) {
@@ -1689,6 +1698,9 @@ function block_exaport_get_students_for_teacher($userid = null, $courseid = 0) {
     }
     if ($teacherrole) {
         $teacherroleids[] = $teacherrole->id;
+    }
+    if ($companymanagerrole) {
+	$teacherroleids[] = $companymanagerrole->id;
     }
 
     if (empty($teacherroleids)) {
