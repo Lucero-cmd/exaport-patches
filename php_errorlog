@@ -1,0 +1,15 @@
+[06-Jul-2026 09:06:12 Europe/London] Default exception handler: Bookmark not found Debug: 
+Error code: bookmarknotfound
+* line 593 of /blocks/exaport/lib/common.php: block_exaport\common\moodle_exception thrown
+* line 41 of /blocks/exaport/shared_item.php: call to block_exaport\common\print_error()
+
+[11-Jul-2026 18:09:16 Europe/London] Default exception handler: Bookmark not found Debug: 
+Error code: bookmarknotfound
+* line 593 of /blocks/exaport/lib/common.php: block_exaport\common\moodle_exception thrown
+* line 41 of /blocks/exaport/shared_item.php: call to block_exaport\common\print_error()
+
+[18-Jul-2026 18:43:17 Europe/London] Default exception handler: Bookmark not found Debug: 
+Error code: bookmarknotfound
+* line 593 of /blocks/exaport/lib/common.php: block_exaport\common\moodle_exception thrown
+* line 41 of /blocks/exaport/shared_item.php: call to block_exaport\common\print_error()
+
