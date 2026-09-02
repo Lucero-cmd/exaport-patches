@@ -1417,5 +1417,39 @@ function xmldb_block_exaport_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026060300, 'exaport');
     }
 
+    if ($oldversion < 2026090200) {
+        // Add block_exaport_pdfannot table for in-document PDF pins/highlights (inline PDF viewer + teacher markup).
+        $table = new xmldb_table('block_exaport_pdfannot');
+
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('itemid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('filehash', XMLDB_TYPE_CHAR, '40', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('page', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '1');
+            $table->add_field('xpos', XMLDB_TYPE_NUMBER, '10, 4', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('ypos', XMLDB_TYPE_NUMBER, '10, 4', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('width', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null);
+            $table->add_field('height', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null);
+            $table->add_field('annotype', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'comment');
+            $table->add_field('colour', XMLDB_TYPE_CHAR, '7', null, null, null, '#ffe066');
+            $table->add_field('content', XMLDB_TYPE_TEXT, null, null, XMLDB_NOTNULL, null, null);
+            $table->add_field('resolved', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('itemid', XMLDB_KEY_FOREIGN, ['itemid'], 'block_exaportitem', ['id']);
+            $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+
+            $table->add_index('itemid_filehash', XMLDB_INDEX_NOTUNIQUE, ['itemid', 'filehash']);
+
+            $dbman->create_table($table);
+        }
+
+        // Exaport savepoint reached.
+        upgrade_block_savepoint(true, 2026090200, 'exaport');
+    }
+
     return $result;
 }

@@ -1,3 +1,10 @@
+### v5.1 (2026090200) ###
+* New feature: PDF item files are now shown in an inline, paged viewer (instead of forcing a download) wherever items are viewed via shared_item.php.
+* New feature: Users with the new block/exaport:annotatepdf capability (teachers/managers by default) can mark up PDFs directly with pins (comments at a point) and highlights (comments on a region), resolve/reopen them, and delete their own. Everyone who can already view the item can read existing annotations.
+* New capability: block/exaport:annotatepdf.
+* New DB table: block_exaport_pdfannot.
+* New endpoint: ajax_pdf_annotations.php (list/save/delete/resolve annotations, gated by the existing item access-token check plus the new capability).
+
 ### v5.1 (2026062400) ###
 * Rework: Categories and items now don't have a 1:m relationship but an m:n relationship. This allows users to assign multiple categories to a single item and vice versa. The database schema has been updated accordingly, and the UI has been adjusted to support multi-category selection.
 * New feature: Flat view of the categories, added to the previously existing folder view.

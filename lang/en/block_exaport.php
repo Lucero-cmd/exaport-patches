@@ -988,3 +988,22 @@ $string['auto_distribute_views_on_enrolment'] = 'Automatically distribute views 
 $string['no_views_to_distribute'] = 'No view template defined to distribute';
 $string['views_created'] = 'Views created: {$a}';
 $string['views_skipped'] = 'Views skipped (already exist): {$a}';
+
+// PDF viewer / annotation strings.
+$string['exaport:annotatepdf'] = 'Mark up PDF files (add pins and highlights)';
+$string['pdfannotations'] = 'Annotations';
+$string['pdfannotation_add'] = 'Add annotation';
+$string['pdfannotation_addhighlight'] = 'Add highlight';
+$string['pdfannotation_placeholder'] = 'Write a comment for this spot...';
+$string['pdfannotation_save'] = 'Save';
+$string['pdfannotation_cancel'] = 'Cancel';
+$string['pdfannotation_delete'] = 'Delete';
+$string['pdfannotation_resolve'] = 'Mark resolved';
+$string['pdfannotation_unresolve'] = 'Reopen';
+$string['pdfannotation_resolved'] = 'Resolved';
+$string['pdfannotation_confirmdelete'] = 'Delete this annotation?';
+$string['pdfannotation_none'] = 'No annotations on this page yet.';
+$string['pdfannotation_page'] = 'Page {$a}';
+$string['pdfannotation_hint'] = 'Click anywhere on the page to leave a comment. Drag to highlight an area.';
+$string['pdfannotation_viewonly'] = 'Only staff with markup permission can add annotations. You can still read existing ones below.';
+$string['pdfviewer_loaderror'] = 'This PDF could not be displayed inline. You can still download it.';

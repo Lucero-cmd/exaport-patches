@@ -512,5 +512,32 @@
         <KEY NAME="courseid" TYPE="foreign" FIELDS="courseid" REFTABLE="course" REFFIELDS="id"/>
       </KEYS>
     </TABLE>
+    <TABLE NAME="block_exaport_pdfannot" COMMENT="in-document annotations (pins/highlights) left on PDF item files">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="itemid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="block_exaportitem.id this annotation belongs to"/>
+        <FIELD NAME="filehash" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="pathnamehash of the stored_file being annotated"/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="author of the annotation"/>
+        <FIELD NAME="page" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="1-indexed PDF page number"/>
+        <FIELD NAME="xpos" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="x position, percent of page width"/>
+        <FIELD NAME="ypos" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="y position, percent of page height"/>
+        <FIELD NAME="width" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="percent width, used for highlight markers"/>
+        <FIELD NAME="height" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="percent height, used for highlight markers"/>
+        <FIELD NAME="annotype" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="comment" SEQUENCE="false" COMMENT="comment or highlight"/>
+        <FIELD NAME="colour" TYPE="char" LENGTH="7" NOTNULL="false" DEFAULT="#ffe066" SEQUENCE="false"/>
+        <FIELD NAME="content" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
+        <FIELD NAME="resolved" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="itemid" TYPE="foreign" FIELDS="itemid" REFTABLE="block_exaportitem" REFFIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="itemid_filehash" UNIQUE="false" FIELDS="itemid, filehash"/>
+      </INDEXES>
+    </TABLE>
   </TABLES>
 </XMLDB>

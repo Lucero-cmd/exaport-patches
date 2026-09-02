@@ -289,6 +289,84 @@ function block_exaport_print_file(stored_file $file) {
     }
 }
 
+/**
+ * Build the markup for the inline PDF viewer (with optional teacher annotation layer).
+ *
+ * Loads pdf.js + our viewer JS/CSS on first call per request, then returns a container
+ * div that javascript/pdfviewer/pdf_annotate.js hydrates into a paged canvas viewer.
+ *
+ * @param \stdClass $item exaport item (must have ->id)
+ * @param string $access access token string as used by block_exaport_get_item()/portfoliofile.php
+ * @param stored_file $file the PDF file to display
+ * @param string $ffurl URL to fetch the raw PDF bytes from (portfoliofile.php)
+ * @return string HTML
+ */
+function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffurl) {
+    global $CFG, $PAGE;
+
+    static $assetsloaded = false;
+    static $counter = 0;
+    $counter++;
+
+    if (!$assetsloaded) {
+        // pdf.js is loaded from a CDN to avoid bundling a multi-megabyte binary with the
+        // plugin; for offline/air-gapped installs, download pdf.min.js + pdf.worker.min.js
+        // from https://mozilla.github.io/pdf.js/ into javascript/pdfviewer/vendor/ and
+        // update the two script URLs below to point there instead.
+        $PAGE->requires->css('/blocks/exaport/css/pdf_annotate.css');
+        $PAGE->requires->js(new moodle_url('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'), true);
+        $PAGE->requires->js(new moodle_url('/blocks/exaport/javascript/pdfviewer/pdf_annotate.js'), true);
+        $assetsloaded = true;
+    }
+
+    $viewerid = 'exaport_pdfviewer_' . (int)$item->id . '_' . $counter;
+    $filehash = $file->get_pathnamehash();
+    $canannotate = has_capability('block/exaport:annotatepdf', context_system::instance());
+
+    $html = '<div class="exaport-pdf-viewer" id="' . $viewerid . '"' .
+        ' data-pdf-url="' . s($ffurl) . '"' .
+        ' data-ajax-url="' . s($CFG->wwwroot . '/blocks/exaport/ajax_pdf_annotations.php') . '"' .
+        ' data-item-id="' . (int)$item->id . '"' .
+        ' data-access="' . s($access) . '"' .
+        ' data-file-hash="' . s($filehash) . '"' .
+        ' data-sesskey="' . s(sesskey()) . '"' .
+        ' data-can-annotate="' . ($canannotate ? '1' : '0') . '"' .
+        ' data-str-page="' . s(get_string('pdfannotation_page', 'block_exaport', '{page}')) . '"' .
+        ' data-str-none="' . s(get_string('pdfannotation_none', 'block_exaport')) . '"' .
+        ' data-str-hint="' . s(get_string('pdfannotation_hint', 'block_exaport')) . '"' .
+        ' data-str-viewonly="' . s(get_string('pdfannotation_viewonly', 'block_exaport')) . '"' .
+        ' data-str-save="' . s(get_string('pdfannotation_save', 'block_exaport')) . '"' .
+        ' data-str-cancel="' . s(get_string('pdfannotation_cancel', 'block_exaport')) . '"' .
+        ' data-str-delete="' . s(get_string('pdfannotation_delete', 'block_exaport')) . '"' .
+        ' data-str-resolve="' . s(get_string('pdfannotation_resolve', 'block_exaport')) . '"' .
+        ' data-str-unresolve="' . s(get_string('pdfannotation_unresolve', 'block_exaport')) . '"' .
+        ' data-str-confirmdelete="' . s(get_string('pdfannotation_confirmdelete', 'block_exaport')) . '"' .
+        ' data-str-loaderror="' . s(get_string('pdfviewer_loaderror', 'block_exaport')) . '"' .
+        '>' .
+        '<div class="exaport-pdf-toolbar">' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-prev">&larr; ' . get_string('previous') . '</button>' .
+        '<span class="exaport-pdf-pageindicator"><span class="exaport-pdf-pagenum">1</span> / ' .
+        '<span class="exaport-pdf-pagecount">-</span></span>' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-next">' . get_string('next') . ' &rarr;</button>' .
+        '<a class="exaport-pdf-btn exaport-pdf-download" href="' . s($ffurl) . '" target="_blank" rel="noopener">' .
+        get_string('download') . '</a>' .
+        '</div>' .
+        '<div class="exaport-pdf-body">' .
+        '<div class="exaport-pdf-canvaswrap">' .
+        '<canvas class="exaport-pdf-canvas"></canvas>' .
+        '<div class="exaport-pdf-annotlayer"></div>' .
+        '</div>' .
+        '<div class="exaport-pdf-sidebar">' .
+        '<h5>' . get_string('pdfannotations', 'block_exaport') . '</h5>' .
+        '<ul class="exaport-pdf-annotlist"></ul>' .
+        '</div>' .
+        '</div>' .
+        '<p class="exaport-pdf-loading">' . get_string('loading') . '</p>' .
+        '</div>';
+
+    return $html;
+}
+
 function block_exaport_course_has_desp() {
     global $COURSE, $DB;
 

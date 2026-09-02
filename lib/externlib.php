@@ -110,6 +110,14 @@ function block_exaport_print_extern_item($item, $access) {
             $ffurl = s("{$CFG->wwwroot}/blocks/exaport/portfoliofile.php?access=" . $access . "&itemid=" . $item->id . '&inst=' . $fileindex);
             if ($file->is_valid_image()) { // Image attachments don't get printed as links.
                 $filescontent .= "<div class=\"item-detail-image\"><img src=\"$ffurl\" alt=\"" . s($item->name) . "\" /></div>";
+            } else if (strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION)) === 'pdf'
+                    || $file->get_mimetype() === 'application/pdf') {
+                // Inline PDF viewer, with pin/highlight annotations for users with the
+                // block/exaport:annotatepdf capability (teachers by default).
+                $icon = $OUTPUT->pix_icon(file_file_icon($file), '');
+                $filescontent .= "<p class=\"filelink\">" . $icon . ' ' .
+                    $OUTPUT->action_link($ffurl, format_string($file->get_filename()), new popup_action ('click', $ffurl)) . "</p>";
+                $filescontent .= block_exaport_render_pdf_viewer($item, $access, $file, $ffurl);
             } else {
                 $icon = $OUTPUT->pix_icon(file_file_icon($file), '');
                 $filescontent .= "<p class=\"filelink\">" . $icon . ' ' .

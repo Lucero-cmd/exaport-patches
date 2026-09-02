@@ -97,6 +97,16 @@ $capabilities = array(
         ),
         'clonepermissionsfrom' => 'moodle/site:manageblocks',
     ),
+    'block/exaport:annotatepdf' => array(
+        'riskbitmask' => RISK_SPAM,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'legacy' => array(
+            'teacher' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ),
+    ),
     'block/exaport:distributecategories' => array(
         'riskbitmask' => RISK_SPAM,
         'captype' => 'write',
