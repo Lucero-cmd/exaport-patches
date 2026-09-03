@@ -324,11 +324,14 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
     // pdf.js also self-registers as an AMD module via a global define() call if it
     // detects an AMD loader on the page - which collides with Moodle's own RequireJS and
     // breaks core navigation (manifests as "Uncaught Error: No define call for core/first"
-    // and the primary nav/drawer disappearing). To avoid that, pdf.js is loaded via a
-    // small inline bootstrap script that hides window.define while pdf.js's script runs,
-    // forcing it to fall back to a plain global (window.pdfjsLib) instead of registering
-    // as an AMD module, then restores window.define immediately afterwards so Moodle's
-    // own module loading is unaffected.
+    // and the primary nav/drawer disappearing). Temporarily nulling window.define while
+    // pdf.js's <script> downloads was tried first and is NOT safe: the download itself
+    // takes long enough (network round-trip) that other Moodle AMD modules loading
+    // concurrently on the same page can call define() during that window and break too.
+    // Instead, pdf.js's source is fetched as plain text and executed synchronously via
+    // new Function() with "define" shadowed as a *local* parameter - so pdf.js sees no
+    // AMD loader in its own execution scope without window.define ever being touched, and
+    // nothing else can run mid-way through that single synchronous execution.
     $assets = '';
     if (!$assetsloaded) {
         $cssurl = new moodle_url('/blocks/exaport/css/pdf_annotate.css');
@@ -337,18 +340,25 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
 
         $assets .= '<link rel="stylesheet" type="text/css" href="' . $cssurl->out() . '">';
         $assets .= '<script>(function() {' .
-            'var exaportAmdBackup = window.define;' .
-            'window.define = undefined;' . // hide RequireJS from pdf.js so it self-attaches as window.pdfjsLib.
-            'var s1 = document.createElement("script");' .
-            's1.src = ' . json_encode($pdfjsurl) . ';' .
-            's1.onload = function() {' .
-                'window.define = exaportAmdBackup;' . // restore RequireJS for the rest of the page.
+            'function loadViewer() {' .
                 'var s2 = document.createElement("script");' .
                 's2.src = ' . json_encode($viewerjsurl->out(false)) . ';' .
                 'document.body.appendChild(s2);' .
-            '};' .
-            's1.onerror = function() { window.define = exaportAmdBackup; };' .
-            'document.body.appendChild(s1);' .
+            '}' .
+            'fetch(' . json_encode($pdfjsurl) . ')' .
+            '.then(function(r) { return r.text(); })' .
+            '.then(function(code) {' .
+                'try {' .
+                    'new Function("define", "exports", "module", code)(undefined, undefined, undefined);' .
+                '} catch (e) {' .
+                    'window.console && console.error("exaport pdf.js bootstrap failed", e);' .
+                '}' .
+                'loadViewer();' .
+            '})' .
+            '.catch(function(e) {' .
+                'window.console && console.error("exaport pdf.js fetch failed", e);' .
+                'loadViewer();' . // still load the viewer script so it shows a clean error instead of hanging.
+            '});' .
         '})();</script>';
         $assetsloaded = true;
     }
