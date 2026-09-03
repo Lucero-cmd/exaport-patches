@@ -1007,3 +1007,14 @@ $string['pdfannotation_page'] = 'Page {$a}';
 $string['pdfannotation_hint'] = 'Click anywhere on the page to leave a comment. Drag to highlight an area.';
 $string['pdfannotation_viewonly'] = 'Only staff with markup permission can add annotations. You can still read existing ones below.';
 $string['pdfviewer_loaderror'] = 'This PDF could not be displayed inline. You can still download it.';
+
+// PDF viewer polish: tools, zoom, colour (v2).
+$string['pdfannotation_tool_comment'] = 'Comment pin';
+$string['pdfannotation_tool_highlight'] = 'Highlight area';
+$string['pdfannotation_tool_pen'] = 'Draw / mark up';
+$string['pdfannotation_colour'] = 'Annotation colour';
+$string['pdfviewer_zoomin'] = 'Zoom in';
+$string['pdfviewer_zoomout'] = 'Zoom out';
+$string['pdfviewer_zoomreset'] = 'Fit to width';
+$string['pdfviewer_fit'] = 'Fit';
+$string['pdfannotation_hintoptional'] = 'Optional note for this mark (leave blank to just mark it)...';

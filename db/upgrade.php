@@ -1451,5 +1451,20 @@ function xmldb_block_exaport_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026090200, 'exaport');
     }
 
+    if ($oldversion < 2026090400) {
+        // Add pathdata field for freehand pen/marker annotations (JSON array of {x,y}
+        // percentage points), plus allow admins/staff to reposition or resize an existing
+        // annotation instead of only delete-and-redo.
+        $table = new xmldb_table('block_exaport_pdfannot');
+        $field = new xmldb_field('pathdata', XMLDB_TYPE_TEXT, null, null, null, null, null, 'annotype');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Exaport savepoint reached.
+        upgrade_block_savepoint(true, 2026090400, 'exaport');
+    }
+
     return $result;
 }

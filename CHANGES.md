@@ -1,3 +1,14 @@
+### v5.1 (2026090400) ###
+* New feature: Freehand pen/marker tool for PDF annotations, alongside the existing comment pins and highlight boxes.
+* New feature: Colour picker for annotations (pins, highlights, and pen strokes).
+* New feature: Zoom in/out/fit-to-width on the PDF viewer.
+* New feature: Touch/tablet support for drawing and tapping annotations.
+* New feature: Existing annotations can be dragged to move; highlights can be resized via a corner handle.
+* New DB field: block_exaport_pdfannot.pathdata (stores freehand pen stroke points).
+* New endpoint action: ajax_pdf_annotations.php?action=update (reposition/resize an existing annotation).
+* Fix: double-escaped file URL in the inline viewer that caused a 404 when fetching the PDF.
+* Fix: pdf.js colliding with Moodle's RequireJS and breaking primary navigation - pdf.js now runs in an isolated execution scope instead of touching window.define.
+
 ### v5.1 (2026090200) ###
 * New feature: PDF item files are now shown in an inline, paged viewer (instead of forcing a download) wherever items are viewed via shared_item.php.
 * New feature: Users with the new block/exaport:annotatepdf capability (teachers/managers by default) can mark up PDFs directly with pins (comments at a point) and highlights (comments on a region), resolve/reopen them, and delete their own. Everyone who can already view the item can read existing annotations.

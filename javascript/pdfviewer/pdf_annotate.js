@@ -1,17 +1,21 @@
 /* Inline PDF viewer + annotation layer for block_exaport.
  *
- * Renders each ".exaport-pdf-viewer" container using pdf.js and overlays
- * click-to-comment pins / drag-to-highlight markers backed by
- * ajax_pdf_annotations.php. Vanilla JS, no build step - loaded via a plain
- * <script> tag emitted inline by lib/lib.php::block_exaport_render_pdf_viewer(),
- * since this renders deep in the page body where Moodle's $PAGE->requires
- * queue is unreliable.
+ * Renders each ".exaport-pdf-viewer" container using pdf.js and overlays three kinds of
+ * teacher markup: comment pins, drag-drawn highlight rectangles, and freehand pen strokes.
+ * Existing annotations can be dragged to move and (highlights) resized. Backed by
+ * ajax_pdf_annotations.php. Vanilla JS, no build step - loaded via a plain <script> tag
+ * emitted inline by lib/lib.php::block_exaport_render_pdf_viewer(), since this renders
+ * deep in the page body where Moodle's $PAGE->requires queue is unreliable.
  */
 (function () {
     'use strict';
 
     var PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    var DRAG_THRESHOLD = 8; // px, below this a pointer down/up pair counts as a "click" (pin), not a drag (highlight).
+    var DRAG_THRESHOLD = 8; // px, below this a pointer down/up pair counts as a "click", not a drag.
+    var ZOOM_MIN = 0.5;
+    var ZOOM_MAX = 3;
+    var ZOOM_STEP = 0.25;
+    var PEN_STROKE_WIDTH = 0.6; // in viewBox units (0-100 = full page width), independent of zoom.
 
     function whenPdfJsReady(callback, onTimeout, attemptsLeft) {
         if (typeof window.pdfjsLib !== 'undefined') {
@@ -77,9 +81,27 @@
         return node;
     }
 
+    function svgEl(tag, attrs) {
+        var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        if (attrs) {
+            Object.keys(attrs).forEach(function (key) {
+                node.setAttribute(key, attrs[key]);
+            });
+        }
+        return node;
+    }
+
     function fmtDate(unixtime) {
         var d = new Date(unixtime * 1000);
         return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    }
+
+    function clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
+    }
+
+    function pointsToAttr(points) {
+        return points.map(function (p) { return p.x + ',' + p.y; }).join(' ');
     }
 
     function Viewer(container) {
@@ -101,10 +123,12 @@
             resolve: container.getAttribute('data-str-resolve'),
             unresolve: container.getAttribute('data-str-unresolve'),
             confirmdelete: container.getAttribute('data-str-confirmdelete'),
-            loaderror: container.getAttribute('data-str-loaderror')
+            loaderror: container.getAttribute('data-str-loaderror'),
+            hintoptional: container.getAttribute('data-str-hintoptional')
         };
 
         this.canvas = container.querySelector('.exaport-pdf-canvas');
+        this.pensvg = container.querySelector('.exaport-pdf-pensvg');
         this.annotLayer = container.querySelector('.exaport-pdf-annotlayer');
         this.pageNumEl = container.querySelector('.exaport-pdf-pagenum');
         this.pageCountEl = container.querySelector('.exaport-pdf-pagecount');
@@ -112,12 +136,25 @@
         this.loadingEl = container.querySelector('.exaport-pdf-loading');
         this.prevBtn = container.querySelector('.exaport-pdf-prev');
         this.nextBtn = container.querySelector('.exaport-pdf-next');
+        this.zoomInBtn = container.querySelector('.exaport-pdf-zoomin');
+        this.zoomOutBtn = container.querySelector('.exaport-pdf-zoomout');
+        this.zoomResetBtn = container.querySelector('.exaport-pdf-zoomreset');
+        this.zoomLevelEl = container.querySelector('.exaport-pdf-zoomlevel');
+        this.toolButtons = container.querySelectorAll('.exaport-pdf-tool');
+        this.colorPicker = container.querySelector('.exaport-pdf-colorpicker');
 
         this.pdfDoc = null;
         this.pageNum = 1;
         this.numPages = 0;
         this.annotations = [];
         this.activePopup = null;
+
+        this.tool = 'comment';
+        this.color = this.colorPicker ? this.colorPicker.value : '#ffe066';
+        this.zoom = 1;
+        this.fitScale = 1;
+        this._drawingPoints = null;
+        this._previewPolyline = null;
 
         this.bindToolbar();
     }
@@ -133,6 +170,7 @@
 
     Viewer.prototype.bindToolbar = function () {
         var self = this;
+
         this.prevBtn.addEventListener('click', function () {
             if (self.pageNum > 1) {
                 self.renderPage(self.pageNum - 1);
@@ -143,6 +181,44 @@
                 self.renderPage(self.pageNum + 1);
             }
         });
+
+        if (this.zoomInBtn) {
+            this.zoomInBtn.addEventListener('click', function () {
+                self.setZoom(self.zoom + ZOOM_STEP);
+            });
+            this.zoomOutBtn.addEventListener('click', function () {
+                self.setZoom(self.zoom - ZOOM_STEP);
+            });
+            this.zoomResetBtn.addEventListener('click', function () {
+                self.setZoom(1);
+            });
+        }
+
+        this.toolButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                self.tool = btn.getAttribute('data-tool');
+                self.toolButtons.forEach(function (b) {
+                    b.classList.toggle('is-active', b === btn);
+                });
+                self.closePopup();
+            });
+        });
+
+        if (this.colorPicker) {
+            this.colorPicker.addEventListener('input', function () {
+                self.color = this.value;
+            });
+        }
+    };
+
+    Viewer.prototype.setZoom = function (zoom) {
+        this.zoom = clamp(Math.round(zoom * 100) / 100, ZOOM_MIN, ZOOM_MAX);
+        if (this.zoomLevelEl) {
+            this.zoomLevelEl.textContent = Math.round(this.zoom * 100) + '%';
+        }
+        if (this.pdfDoc) {
+            this.renderPage(this.pageNum);
+        }
     };
 
     Viewer.prototype.init = function () {
@@ -193,13 +269,18 @@
         this.pdfDoc.getPage(num).then(function (page) {
             var containerWidth = self.canvas.parentNode.clientWidth || 600;
             var unscaled = page.getViewport({scale: 1});
-            var scale = Math.min(2, Math.max(0.5, containerWidth / unscaled.width));
+            self.fitScale = clamp(containerWidth / unscaled.width, 0.3, 1.5);
+            var scale = self.fitScale * self.zoom;
             var viewport = page.getViewport({scale: scale});
 
             self.canvas.width = viewport.width;
             self.canvas.height = viewport.height;
+            self.canvas.style.width = viewport.width + 'px';
+            self.canvas.style.height = viewport.height + 'px';
             self.annotLayer.style.width = viewport.width + 'px';
             self.annotLayer.style.height = viewport.height + 'px';
+            self.pensvg.style.width = viewport.width + 'px';
+            self.pensvg.style.height = viewport.height + 'px';
 
             var ctx = self.canvas.getContext('2d');
             page.render({canvasContext: ctx, viewport: viewport}).promise.then(function () {
@@ -210,6 +291,25 @@
         });
     };
 
+    // -- coordinate helpers --------------------------------------------------------------
+
+    Viewer.prototype.pointFromEvent = function (evt) {
+        var rect = this.canvas.getBoundingClientRect();
+        var x = (evt.clientX - rect.left) / rect.width * 100;
+        var y = (evt.clientY - rect.top) / rect.height * 100;
+        return {x: clamp(x, 0, 100), y: clamp(y, 0, 100)};
+    };
+
+    Viewer.prototype.pixelDeltaToPercent = function (dxPx, dyPx) {
+        var rect = this.canvas.getBoundingClientRect();
+        return {
+            x: dxPx / rect.width * 100,
+            y: dyPx / rect.height * 100
+        };
+    };
+
+    // -- creating new annotations on the canvas -------------------------------------------
+
     Viewer.prototype.bindCanvasEvents = function () {
         var self = this;
         if (this._eventsBound) {
@@ -217,52 +317,90 @@
         }
         this._eventsBound = true;
 
-        var startX = null;
-        var startY = null;
+        var startPoint = null;
         var startClientX = null;
         var startClientY = null;
 
-        function pointFromEvent(evt) {
-            var rect = self.canvas.getBoundingClientRect();
-            var x = (evt.clientX - rect.left) / rect.width * 100;
-            var y = (evt.clientY - rect.top) / rect.height * 100;
-            return {x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y))};
-        }
-
         this.canvas.addEventListener('pointerdown', function (evt) {
-            if (!self.canAnnotate) {
+            if (!self.canAnnotate || self.activePopup) {
                 return;
             }
-            self.closePopup();
+            self.canvas.setPointerCapture(evt.pointerId);
             startClientX = evt.clientX;
             startClientY = evt.clientY;
-            var p = pointFromEvent(evt);
-            startX = p.x;
-            startY = p.y;
+            startPoint = self.pointFromEvent(evt);
+
+            if (self.tool === 'pen') {
+                self._drawingPoints = [startPoint];
+                self._previewPolyline = svgEl('polyline', {
+                    points: pointsToAttr(self._drawingPoints),
+                    stroke: self.color,
+                    'stroke-width': PEN_STROKE_WIDTH,
+                    opacity: 0.85
+                });
+                self.pensvg.appendChild(self._previewPolyline);
+            }
+        });
+
+        this.canvas.addEventListener('pointermove', function (evt) {
+            if (self.tool === 'pen' && self._drawingPoints) {
+                self._drawingPoints.push(self.pointFromEvent(evt));
+                self._previewPolyline.setAttribute('points', pointsToAttr(self._drawingPoints));
+            }
         });
 
         this.canvas.addEventListener('pointerup', function (evt) {
-            if (!self.canAnnotate || startX === null) {
+            if (!self.canAnnotate || startPoint === null) {
                 return;
             }
+
+            if (self.tool === 'pen') {
+                if (self._previewPolyline && self._previewPolyline.parentNode) {
+                    self._previewPolyline.parentNode.removeChild(self._previewPolyline);
+                }
+                self._previewPolyline = null;
+                var points = self._drawingPoints;
+                self._drawingPoints = null;
+                if (points && points.length === 1) {
+                    points.push({x: points[0].x, y: points[0].y}); // quick tap -> tiny dot stroke.
+                }
+                if (points && points.length >= 2) {
+                    self.openCreatePopup({type: 'pen', pathdata: JSON.stringify(points)}, evt.clientX, evt.clientY);
+                }
+                startPoint = null;
+                return;
+            }
+
             var dx = evt.clientX - startClientX;
             var dy = evt.clientY - startClientY;
             var dist = Math.sqrt(dx * dx + dy * dy);
-            var endPoint = pointFromEvent(evt);
+            var endPoint = self.pointFromEvent(evt);
 
-            if (dist < DRAG_THRESHOLD) {
-                self.openCreatePopup({type: 'comment', x: startX, y: startY}, evt.clientX, evt.clientY);
-            } else {
-                var rect = {
-                    x: Math.min(startX, endPoint.x),
-                    y: Math.min(startY, endPoint.y),
-                    width: Math.abs(endPoint.x - startX),
-                    height: Math.abs(endPoint.y - startY)
-                };
+            if (self.tool === 'highlight') {
+                var rect;
+                if (dist < DRAG_THRESHOLD) {
+                    // A plain tap with the highlight tool selected: drop a small default box
+                    // centred on the tap instead of requiring a precise drag every time.
+                    rect = {
+                        x: clamp(startPoint.x - 5, 0, 95),
+                        y: clamp(startPoint.y - 2, 0, 96),
+                        width: 10,
+                        height: 4
+                    };
+                } else {
+                    rect = {
+                        x: Math.min(startPoint.x, endPoint.x),
+                        y: Math.min(startPoint.y, endPoint.y),
+                        width: Math.abs(endPoint.x - startPoint.x),
+                        height: Math.abs(endPoint.y - startPoint.y)
+                    };
+                }
                 self.openCreatePopup(Object.assign({type: 'highlight'}, rect), evt.clientX, evt.clientY);
+            } else {
+                // Comment tool: always anchor on the initial tap point, drag distance ignored.
+                self.openCreatePopup({type: 'comment', x: startPoint.x, y: startPoint.y}, evt.clientX, evt.clientY);
             }
-            startX = null;
-            startY = null;
+            startPoint = null;
         });
     };
 
@@ -273,42 +411,221 @@
         });
     };
 
+    // -- rendering existing annotations ----------------------------------------------------
+
     Viewer.prototype.drawMarkers = function () {
         var self = this;
         this.annotLayer.innerHTML = '';
-
-        if (!this.canAnnotate) {
-            var hint = el('p', 'exaport-pdf-hint', this.str.viewonly);
-            // Non-blocking hint, appended once above the layer via sidebar instead of canvas to avoid clutter.
-            hint.style.display = 'none';
-        }
+        this.pensvg.innerHTML = '';
 
         this.pageAnnotations().forEach(function (annot) {
-            var marker;
-            if (annot.type === 'highlight' && annot.width) {
-                marker = el('div', 'exaport-pdf-highlight');
-                marker.style.left = annot.x + '%';
-                marker.style.top = annot.y + '%';
-                marker.style.width = annot.width + '%';
-                marker.style.height = annot.height + '%';
-                if (annot.colour) {
-                    marker.style.background = self.hexToRgba(annot.colour, 0.4);
-                }
+            if (annot.type === 'pen' && annot.pathdata) {
+                self.drawPenStroke(annot);
+            } else if (annot.type === 'highlight' && annot.width) {
+                self.drawHighlight(annot);
             } else {
-                marker = el('div', 'exaport-pdf-pin');
-                marker.style.left = annot.x + '%';
-                marker.style.top = annot.y + '%';
+                self.drawPin(annot);
             }
-            if (annot.resolved) {
-                marker.classList.add('is-resolved');
-            }
-            marker.setAttribute('data-annot-id', annot.id);
-            marker.title = annot.ownername + ': ' + annot.content;
-            marker.addEventListener('click', function (evt) {
-                evt.stopPropagation();
+        });
+    };
+
+    Viewer.prototype.drawPin = function (annot) {
+        var self = this;
+        var marker = el('div', 'exaport-pdf-pin');
+        marker.style.left = annot.x + '%';
+        marker.style.top = annot.y + '%';
+        marker.style.background = annot.colour || '#ffbe0b';
+        if (annot.resolved) {
+            marker.classList.add('is-resolved');
+        }
+        marker.setAttribute('data-annot-id', annot.id);
+        marker.title = annot.ownername + ': ' + annot.content;
+
+        this.attachMarkerDrag(marker, annot, {
+            onClick: function (evt) {
                 self.openViewPopup(annot, evt.clientX, evt.clientY, marker);
+            },
+            onMove: function (dxPct, dyPct) {
+                marker.style.left = clamp(annot.x + dxPct, 0, 100) + '%';
+                marker.style.top = clamp(annot.y + dyPct, 0, 100) + '%';
+            },
+            onMoveEnd: function (dxPct, dyPct) {
+                self.persistUpdate(annot, {
+                    x: clamp(annot.x + dxPct, 0, 100),
+                    y: clamp(annot.y + dyPct, 0, 100)
+                });
+            }
+        });
+
+        this.annotLayer.appendChild(marker);
+    };
+
+    Viewer.prototype.drawHighlight = function (annot) {
+        var self = this;
+        var marker = el('div', 'exaport-pdf-highlight');
+        marker.style.left = annot.x + '%';
+        marker.style.top = annot.y + '%';
+        marker.style.width = annot.width + '%';
+        marker.style.height = annot.height + '%';
+        marker.style.background = this.hexToRgba(annot.colour || '#ffe066', 0.4);
+        if (annot.resolved) {
+            marker.classList.add('is-resolved');
+        }
+        marker.setAttribute('data-annot-id', annot.id);
+        marker.title = annot.ownername + (annot.content ? ': ' + annot.content : '');
+
+        this.attachMarkerDrag(marker, annot, {
+            onClick: function (evt) {
+                self.openViewPopup(annot, evt.clientX, evt.clientY, marker);
+            },
+            onMove: function (dxPct, dyPct) {
+                marker.style.left = clamp(annot.x + dxPct, 0, 100 - annot.width) + '%';
+                marker.style.top = clamp(annot.y + dyPct, 0, 100 - annot.height) + '%';
+            },
+            onMoveEnd: function (dxPct, dyPct) {
+                self.persistUpdate(annot, {
+                    x: clamp(annot.x + dxPct, 0, 100 - annot.width),
+                    y: clamp(annot.y + dyPct, 0, 100 - annot.height)
+                });
+            }
+        });
+
+        if (annot.candelete) {
+            var handle = el('div', 'exaport-pdf-resizehandle');
+            var startW = null;
+            var startH = null;
+            var startClientX = null;
+            var startClientY = null;
+
+            handle.addEventListener('pointerdown', function (evt) {
+                evt.stopPropagation();
+                handle.setPointerCapture(evt.pointerId);
+                startW = annot.width;
+                startH = annot.height;
+                startClientX = evt.clientX;
+                startClientY = evt.clientY;
             });
-            self.annotLayer.appendChild(marker);
+            handle.addEventListener('pointermove', function (evt) {
+                if (startW === null) {
+                    return;
+                }
+                evt.stopPropagation();
+                var d = self.pixelDeltaToPercent(evt.clientX - startClientX, evt.clientY - startClientY);
+                var newW = clamp(startW + d.x, 2, 100 - annot.x);
+                var newH = clamp(startH + d.y, 2, 100 - annot.y);
+                marker.style.width = newW + '%';
+                marker.style.height = newH + '%';
+            });
+            handle.addEventListener('pointerup', function (evt) {
+                if (startW === null) {
+                    return;
+                }
+                evt.stopPropagation();
+                var d = self.pixelDeltaToPercent(evt.clientX - startClientX, evt.clientY - startClientY);
+                var newW = clamp(startW + d.x, 2, 100 - annot.x);
+                var newH = clamp(startH + d.y, 2, 100 - annot.y);
+                startW = null;
+                startH = null;
+                self.persistUpdate(annot, {width: newW, height: newH});
+            });
+
+            marker.appendChild(handle);
+        }
+
+        this.annotLayer.appendChild(marker);
+    };
+
+    Viewer.prototype.drawPenStroke = function (annot) {
+        var self = this;
+        var points = annot.pathdata;
+
+        var polyline = svgEl('polyline', {
+            points: pointsToAttr(points),
+            stroke: annot.colour || '#ffe066',
+            'stroke-width': PEN_STROKE_WIDTH,
+            opacity: annot.resolved ? 0.45 : 0.85
+        });
+        this.pensvg.appendChild(polyline);
+
+        // Invisible grab handle covering the stroke's bounding box, for click/drag/view.
+        var handle = el('div', 'exaport-pdf-penhandle');
+        handle.style.left = annot.x + '%';
+        handle.style.top = annot.y + '%';
+        handle.style.width = Math.max(annot.width, 2) + '%';
+        handle.style.height = Math.max(annot.height, 2) + '%';
+        handle.setAttribute('data-annot-id', annot.id);
+        handle.title = annot.ownername + (annot.content ? ': ' + annot.content : '');
+
+        this.attachMarkerDrag(handle, annot, {
+            onClick: function (evt) {
+                self.openViewPopup(annot, evt.clientX, evt.clientY, handle);
+            },
+            onMove: function (dxPct, dyPct) {
+                handle.style.left = clamp(annot.x + dxPct, 0, 100) + '%';
+                handle.style.top = clamp(annot.y + dyPct, 0, 100) + '%';
+                var translated = points.map(function (p) {
+                    return {x: clamp(p.x + dxPct, 0, 100), y: clamp(p.y + dyPct, 0, 100)};
+                });
+                polyline.setAttribute('points', pointsToAttr(translated));
+            },
+            onMoveEnd: function (dxPct, dyPct) {
+                var translated = points.map(function (p) {
+                    return {x: clamp(p.x + dxPct, 0, 100), y: clamp(p.y + dyPct, 0, 100)};
+                });
+                self.persistUpdate(annot, {pathdata: JSON.stringify(translated)});
+            }
+        });
+
+        this.annotLayer.appendChild(handle);
+    };
+
+    /**
+     * Wire up click-vs-drag handling for an existing annotation's marker/handle element.
+     * Always allows a plain click (any user) to view it; only lets candelete === true
+     * annotations actually be dragged.
+     */
+    Viewer.prototype.attachMarkerDrag = function (markerEl, annot, handlers) {
+        var self = this;
+        var startClientX = null;
+        var startClientY = null;
+        var dragging = false;
+
+        markerEl.addEventListener('pointerdown', function (evt) {
+            evt.stopPropagation();
+            markerEl.setPointerCapture(evt.pointerId);
+            startClientX = evt.clientX;
+            startClientY = evt.clientY;
+            dragging = false;
+        });
+
+        markerEl.addEventListener('pointermove', function (evt) {
+            if (startClientX === null || !annot.candelete) {
+                return;
+            }
+            evt.stopPropagation();
+            var dx = evt.clientX - startClientX;
+            var dy = evt.clientY - startClientY;
+            if (!dragging && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) {
+                return;
+            }
+            dragging = true;
+            var d = self.pixelDeltaToPercent(dx, dy);
+            handlers.onMove(d.x, d.y);
+        });
+
+        markerEl.addEventListener('pointerup', function (evt) {
+            if (startClientX === null) {
+                return;
+            }
+            evt.stopPropagation();
+            if (dragging) {
+                var d = self.pixelDeltaToPercent(evt.clientX - startClientX, evt.clientY - startClientY);
+                handlers.onMoveEnd(d.x, d.y);
+            } else {
+                handlers.onClick(evt);
+            }
+            startClientX = null;
+            dragging = false;
         });
     };
 
@@ -322,6 +639,8 @@
         var b = parseInt(m[3], 16);
         return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     };
+
+    // -- sidebar ----------------------------------------------------------------------------
 
     Viewer.prototype.renderSidebar = function () {
         var self = this;
@@ -339,11 +658,14 @@
             }
 
             var meta = el('div', 'exaport-pdf-annot-meta');
-            meta.appendChild(el('span', null, annot.ownername + ' \u00b7 p.' + annot.page));
+            var typeLabel = annot.type === 'pen' ? '\u270f' : (annot.type === 'highlight' ? '\u25fb' : '\ud83d\udcac');
+            meta.appendChild(el('span', null, typeLabel + ' ' + annot.ownername + ' \u00b7 p.' + annot.page));
             meta.appendChild(el('span', null, fmtDate(annot.timecreated)));
             li.appendChild(meta);
 
-            li.appendChild(el('p', 'exaport-pdf-annot-text', annot.content));
+            if (annot.content) {
+                li.appendChild(el('p', 'exaport-pdf-annot-text', annot.content));
+            }
 
             var actions = el('div', 'exaport-pdf-annot-actions');
 
@@ -379,6 +701,8 @@
         });
     };
 
+    // -- popups -------------------------------------------------------------------------------
+
     Viewer.prototype.closePopup = function () {
         if (this.activePopup && this.activePopup.parentNode) {
             this.activePopup.parentNode.removeChild(this.activePopup);
@@ -388,10 +712,9 @@
 
     Viewer.prototype.positionPopup = function (popup, clientX, clientY) {
         var wrapRect = this.canvas.parentNode.getBoundingClientRect();
-        var left = clientX - wrapRect.left;
-        var top = clientY - wrapRect.top;
-        // Keep the popup on-screen within the canvas wrapper.
-        var maxLeft = wrapRect.width - 250;
+        var left = clientX - wrapRect.left + this.canvas.parentNode.scrollLeft;
+        var top = clientY - wrapRect.top + this.canvas.parentNode.scrollTop;
+        var maxLeft = this.canvas.parentNode.scrollWidth - 250;
         popup.style.left = Math.max(0, Math.min(left, maxLeft)) + 'px';
         popup.style.top = Math.max(0, top) + 'px';
     };
@@ -400,9 +723,11 @@
         var self = this;
         this.closePopup();
 
+        var requireContent = spec.type === 'comment';
+
         var popup = el('div', 'exaport-pdf-popup');
         var textarea = document.createElement('textarea');
-        textarea.placeholder = this.str.hint;
+        textarea.placeholder = requireContent ? this.str.hint : this.str.hintoptional;
         popup.appendChild(textarea);
 
         var actions = el('div', 'exaport-pdf-popup-actions');
@@ -415,7 +740,7 @@
         });
         saveBtn.addEventListener('click', function () {
             var content = textarea.value.trim();
-            if (!content) {
+            if (requireContent && !content) {
                 return;
             }
             self.createAnnotation(spec, content);
@@ -439,7 +764,9 @@
         meta.appendChild(el('span', null, annot.ownername));
         meta.appendChild(el('span', null, fmtDate(annot.timecreated)));
         popup.appendChild(meta);
-        popup.appendChild(el('p', 'exaport-pdf-annot-text', annot.content));
+        if (annot.content) {
+            popup.appendChild(el('p', 'exaport-pdf-annot-text', annot.content));
+        }
 
         var actions = el('div', 'exaport-pdf-popup-actions');
         var closeBtn = el('button', null, this.str.cancel);
@@ -475,17 +802,21 @@
         this.activePopup = popup;
     };
 
+    // -- persistence ----------------------------------------------------------------------------
+
     Viewer.prototype.createAnnotation = function (spec, content) {
         var self = this;
         var params = Object.assign(this.baseParams(), {
             action: 'save',
             page: this.pageNum,
-            x: spec.x,
-            y: spec.y,
-            width: spec.width || '',
-            height: spec.height || '',
+            x: spec.x || 0,
+            y: spec.y || 0,
+            width: spec.width,
+            height: spec.height,
             type: spec.type,
-            content: content
+            colour: this.color,
+            content: content,
+            pathdata: spec.pathdata
         });
         ajax(this.ajaxUrl, 'POST', params).then(function (data) {
             self.annotations.push(data.annotation);
@@ -494,6 +825,23 @@
             self.renderSidebar();
         }).catch(function (err) {
             window.alert(err.message || 'Could not save annotation');
+        });
+    };
+
+    /**
+     * Persist a move/resize for an existing annotation, then update local state in place
+     * (rather than re-fetching the whole list) and redraw.
+     */
+    Viewer.prototype.persistUpdate = function (annot, changes) {
+        var self = this;
+        var params = Object.assign(this.baseParams(), {action: 'update', id: annot.id}, changes);
+        ajax(this.ajaxUrl, 'POST', params).then(function (data) {
+            Object.assign(annot, data.annotation);
+            self.drawMarkers();
+            self.renderSidebar();
+        }).catch(function (err) {
+            window.alert(err.message || 'Could not move annotation');
+            self.drawMarkers(); // snap back to last-known-good position.
         });
     };
 

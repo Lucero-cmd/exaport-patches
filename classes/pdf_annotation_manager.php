@@ -82,7 +82,7 @@ class pdf_annotation_manager {
     /**
      * Create a new annotation.
      *
-     * @param array $data page, x, y, width, height, type, colour, content
+     * @param array $data page, x, y, width, height, type, colour, content, pathdata (pen only)
      * @return array exported annotation
      */
     public function save_annotation(array $data): array {
@@ -92,24 +92,23 @@ class pdf_annotation_manager {
             throw new \moodle_exception('nopermissions', 'error', '', get_string('exaport:annotatepdf', 'block_exaport'));
         }
 
-        $content = trim((string)($data['content'] ?? ''));
-        if ($content === '') {
-            throw new \invalid_parameter_exception('content is required');
+        $type = $data['type'] ?? 'comment';
+        if (!in_array($type, ['comment', 'highlight', 'pen'], true)) {
+            $type = 'comment';
         }
 
-        $type = ($data['type'] ?? 'comment') === 'highlight' ? 'highlight' : 'comment';
+        $content = trim((string)($data['content'] ?? ''));
+        if ($type === 'comment' && $content === '') {
+            // A pin's whole purpose is the note attached to it; highlight/pen marks can
+            // stand alone (e.g. just circling something) so content is optional for those.
+            throw new \invalid_parameter_exception('content is required for a comment pin');
+        }
 
         $record = new \stdClass();
         $record->itemid = $this->item->id;
         $record->filehash = $this->filehash;
         $record->userid = $USER->id;
         $record->page = max(1, (int)($data['page'] ?? 1));
-        $record->xpos = $this->clamp_percent($data['x'] ?? 0);
-        $record->ypos = $this->clamp_percent($data['y'] ?? 0);
-        $record->width = isset($data['width']) && $data['width'] !== '' && $data['width'] !== null
-            ? $this->clamp_percent($data['width']) : null;
-        $record->height = isset($data['height']) && $data['height'] !== '' && $data['height'] !== null
-            ? $this->clamp_percent($data['height']) : null;
         $record->annotype = $type;
         $record->colour = $this->clean_colour($data['colour'] ?? '#ffe066');
         $record->content = $content;
@@ -117,8 +116,77 @@ class pdf_annotation_manager {
         $record->timecreated = time();
         $record->timemodified = $record->timecreated;
 
+        if ($type === 'pen') {
+            $points = $this->clean_pathdata($data['pathdata'] ?? null);
+            $bbox = $this->bounding_box($points);
+            $record->xpos = $bbox['x'];
+            $record->ypos = $bbox['y'];
+            $record->width = $bbox['width'];
+            $record->height = $bbox['height'];
+            $record->pathdata = json_encode($points);
+        } else {
+            $record->xpos = $this->clamp_percent($data['x'] ?? 0);
+            $record->ypos = $this->clamp_percent($data['y'] ?? 0);
+            $record->width = isset($data['width']) && $data['width'] !== '' && $data['width'] !== null
+                ? $this->clamp_percent($data['width']) : null;
+            $record->height = isset($data['height']) && $data['height'] !== '' && $data['height'] !== null
+                ? $this->clamp_percent($data['height']) : null;
+            $record->pathdata = null;
+        }
+
         $record->id = $DB->insert_record('block_exaport_pdfannot', $record);
 
+        return $this->export_one($record);
+    }
+
+    /**
+     * Reposition/resize an existing annotation (drag-to-move, drag-to-resize, or moving a
+     * whole pen stroke). Only the author or a user with full markup capability may edit.
+     *
+     * @param int $id
+     * @param array $data any of x, y, width, height, pathdata - only provided keys change
+     * @return array exported annotation
+     */
+    public function update_annotation(int $id, array $data): array {
+        global $DB, $USER;
+
+        $record = $DB->get_record('block_exaport_pdfannot',
+            ['id' => $id, 'itemid' => $this->item->id], '*', MUST_EXIST);
+
+        if ((int)$record->userid !== (int)$USER->id && !$this->can_manage_all()) {
+            throw new \moodle_exception('nopermissions', 'error', '', 'edit annotation');
+        }
+
+        $update = new \stdClass();
+        $update->id = $id;
+        $update->timemodified = time();
+
+        if ($record->annotype === 'pen' && isset($data['pathdata'])) {
+            $points = $this->clean_pathdata($data['pathdata']);
+            $bbox = $this->bounding_box($points);
+            $update->pathdata = json_encode($points);
+            $update->xpos = $bbox['x'];
+            $update->ypos = $bbox['y'];
+            $update->width = $bbox['width'];
+            $update->height = $bbox['height'];
+        } else {
+            if (isset($data['x'])) {
+                $update->xpos = $this->clamp_percent($data['x']);
+            }
+            if (isset($data['y'])) {
+                $update->ypos = $this->clamp_percent($data['y']);
+            }
+            if (isset($data['width']) && $data['width'] !== '') {
+                $update->width = $this->clamp_percent($data['width']);
+            }
+            if (isset($data['height']) && $data['height'] !== '') {
+                $update->height = $this->clamp_percent($data['height']);
+            }
+        }
+
+        $DB->update_record('block_exaport_pdfannot', $update);
+
+        $record = $DB->get_record('block_exaport_pdfannot', ['id' => $id], '*', MUST_EXIST);
         return $this->export_one($record);
     }
 
@@ -187,6 +255,7 @@ class pdf_annotation_manager {
             'height' => $record->height !== null ? (float)$record->height : null,
             'type' => $record->annotype,
             'colour' => $record->colour,
+            'pathdata' => !empty($record->pathdata) ? json_decode($record->pathdata, true) : null,
             'content' => $record->content,
             'ownerid' => $userid,
             'ownername' => $author ? fullname($author) : get_string('deleteduser', 'moodle'),
@@ -226,5 +295,66 @@ class pdf_annotation_manager {
             return $colour;
         }
         return '#ffe066';
+    }
+
+    /**
+     * Parse + sanitise a freehand pen stroke sent as a JSON string of [{x,y}, ...] points.
+     *
+     * @param mixed $raw JSON-encoded string from the client
+     * @return array clamped [['x' => float, 'y' => float], ...] points
+     */
+    protected function clean_pathdata($raw): array {
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+        } else if (is_array($raw)) {
+            $decoded = $raw;
+        } else {
+            $decoded = null;
+        }
+
+        if (!is_array($decoded) || count($decoded) < 2) {
+            throw new \invalid_parameter_exception('pathdata must be an array of at least 2 points');
+        }
+
+        // Cap stroke complexity so a single annotation can't bloat storage/rendering.
+        if (count($decoded) > 2000) {
+            $decoded = array_slice($decoded, 0, 2000);
+        }
+
+        $points = [];
+        foreach ($decoded as $point) {
+            if (!is_array($point) || !isset($point['x'], $point['y'])) {
+                continue;
+            }
+            $points[] = [
+                'x' => $this->clamp_percent($point['x']),
+                'y' => $this->clamp_percent($point['y']),
+            ];
+        }
+
+        if (count($points) < 2) {
+            throw new \invalid_parameter_exception('pathdata must contain at least 2 valid points');
+        }
+
+        return $points;
+    }
+
+    /**
+     * Compute the bounding box of a pen stroke's points, for hit-testing/bookkeeping.
+     *
+     * @param array $points [['x' => float, 'y' => float], ...]
+     * @return array ['x' => float, 'y' => float, 'width' => float, 'height' => float]
+     */
+    protected function bounding_box(array $points): array {
+        $xs = array_column($points, 'x');
+        $ys = array_column($points, 'y');
+        $minx = min($xs);
+        $miny = min($ys);
+        return [
+            'x' => $minx,
+            'y' => $miny,
+            'width' => max($xs) - $minx,
+            'height' => max($ys) - $miny,
+        ];
     }
 }

@@ -10,12 +10,69 @@
 
 .exaport-pdf-toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     padding: 6px 10px;
     border-bottom: 1px solid #d5d9de;
     background: #f1f3f5;
     border-radius: 4px 4px 0 0;
+}
+
+.exaport-pdf-drawtoolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #d5d9de;
+    background: #fbf6e8;
+}
+
+.exaport-pdf-toolgroup {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.exaport-pdf-tool {
+    font-size: 1rem;
+    line-height: 1;
+    padding: 5px 9px;
+}
+
+.exaport-pdf-tool.is-active {
+    background: #2f7ed8;
+    border-color: #2f7ed8;
+    color: #fff;
+}
+
+.exaport-pdf-colorpicker {
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid #c7ccd1;
+    border-radius: 3px;
+    cursor: pointer;
+    background: none;
+}
+
+.exaport-pdf-toolhint {
+    font-size: 0.75rem;
+    color: #7a6a2a;
+}
+
+.exaport-pdf-zoomgroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.exaport-pdf-zoomlevel {
+    font-size: 0.8rem;
+    color: #444;
+    min-width: 38px;
+    text-align: center;
+    display: inline-block;
 }
 
 .exaport-pdf-btn {
@@ -61,17 +118,31 @@
     background: #fff;
     box-shadow: 0 0 0 1px #e0e3e6;
     flex: 1 1 480px;
+    max-width: 100%;
+    overflow: auto;
 }
 
 .exaport-pdf-canvas {
     display: block;
-    max-width: 100%;
-    height: auto;
     cursor: crosshair;
+    touch-action: none; /* let our own pointer handlers own drag/draw gestures instead of the browser's scroll/pinch */
 }
 
 .exaport-pdf-viewer[data-can-annotate="0"] .exaport-pdf-canvas {
     cursor: default;
+}
+
+.exaport-pdf-pensvg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* strokes are grabbed via their invisible bbox handle in the annotlayer, not the svg itself */
+}
+
+.exaport-pdf-pensvg polyline {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .exaport-pdf-annotlayer {
@@ -80,24 +151,30 @@
     left: 0;
     right: 0;
     bottom: 0;
+    pointer-events: none; /* let clicks on empty space fall through to the canvas below; markers opt back in */
 }
 
 .exaport-pdf-pin {
     position: absolute;
-    width: 22px;
-    height: 22px;
-    margin-left: -11px;
-    margin-top: -22px;
+    width: 24px;
+    height: 24px;
+    margin-left: -12px;
+    margin-top: -24px;
     border-radius: 50% 50% 50% 0;
-    background: #ffbe0b;
     border: 1px solid rgba(0, 0, 0, 0.25);
     transform: rotate(-45deg);
-    cursor: pointer;
+    cursor: grab;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.exaport-pdf-pin:active {
+    cursor: grabbing;
 }
 
 .exaport-pdf-pin.is-resolved {
-    background: #94d3a2;
+    filter: saturate(0.5) brightness(1.15);
 }
 
 .exaport-pdf-pin::after {
@@ -113,18 +190,63 @@
 
 .exaport-pdf-highlight {
     position: absolute;
-    background: rgba(255, 224, 102, 0.45);
-    border: 1px solid rgba(230, 180, 20, 0.8);
-    cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.exaport-pdf-highlight:active {
+    cursor: grabbing;
 }
 
 .exaport-pdf-highlight.is-resolved {
-    background: rgba(148, 211, 162, 0.45);
-    border-color: rgba(60, 150, 80, 0.8);
+    filter: saturate(0.5) brightness(1.1);
+}
+
+.exaport-pdf-resizehandle {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #2f7ed8;
+    cursor: nwse-resize;
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.exaport-pdf-penhandle {
+    position: absolute;
+    background: transparent;
+    cursor: grab;
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.exaport-pdf-penhandle:active {
+    cursor: grabbing;
 }
 
 .exaport-pdf-marker-active {
     outline: 2px solid #2f7ed8;
+    outline-offset: 1px;
+}
+
+@media (max-width: 600px) {
+    .exaport-pdf-pin {
+        width: 30px;
+        height: 30px;
+        margin-left: -15px;
+        margin-top: -30px;
+    }
+
+    .exaport-pdf-resizehandle {
+        width: 18px;
+        height: 18px;
+    }
 }
 
 .exaport-pdf-sidebar {

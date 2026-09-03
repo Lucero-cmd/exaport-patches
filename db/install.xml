@@ -523,7 +523,8 @@
         <FIELD NAME="ypos" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="y position, percent of page height"/>
         <FIELD NAME="width" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="percent width, used for highlight markers"/>
         <FIELD NAME="height" TYPE="number" LENGTH="10" DECIMALS="4" NOTNULL="false" SEQUENCE="false" COMMENT="percent height, used for highlight markers"/>
-        <FIELD NAME="annotype" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="comment" SEQUENCE="false" COMMENT="comment or highlight"/>
+        <FIELD NAME="annotype" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="comment" SEQUENCE="false" COMMENT="comment, highlight, or pen"/>
+        <FIELD NAME="pathdata" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of {x,y} percentage points for freehand pen strokes"/>
         <FIELD NAME="colour" TYPE="char" LENGTH="7" NOTNULL="false" DEFAULT="#ffe066" SEQUENCE="false"/>
         <FIELD NAME="content" TYPE="text" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="resolved" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>

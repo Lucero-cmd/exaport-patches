@@ -379,6 +379,7 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
         ' data-str-page="' . s(get_string('pdfannotation_page', 'block_exaport', '{page}')) . '"' .
         ' data-str-none="' . s(get_string('pdfannotation_none', 'block_exaport')) . '"' .
         ' data-str-hint="' . s(get_string('pdfannotation_hint', 'block_exaport')) . '"' .
+        ' data-str-hintoptional="' . s(get_string('pdfannotation_hintoptional', 'block_exaport')) . '"' .
         ' data-str-viewonly="' . s(get_string('pdfannotation_viewonly', 'block_exaport')) . '"' .
         ' data-str-save="' . s(get_string('pdfannotation_save', 'block_exaport')) . '"' .
         ' data-str-cancel="' . s(get_string('pdfannotation_cancel', 'block_exaport')) . '"' .
@@ -389,20 +390,39 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
         ' data-str-loaderror="' . s(get_string('pdfviewer_loaderror', 'block_exaport')) . '"' .
         '>' .
         '<div class="exaport-pdf-toolbar">' .
-        '<button type="button" class="exaport-pdf-btn exaport-pdf-prev">&larr; ' . get_string('previous') . '</button>' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-prev" disabled>&larr; ' . get_string('previous') . '</button>' .
         '<span class="exaport-pdf-pageindicator"><span class="exaport-pdf-pagenum">1</span> / ' .
         '<span class="exaport-pdf-pagecount">-</span></span>' .
-        '<button type="button" class="exaport-pdf-btn exaport-pdf-next">' . get_string('next') . ' &rarr;</button>' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-next" disabled>' . get_string('next') . ' &rarr;</button>' .
+        '<span class="exaport-pdf-zoomgroup">' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-zoomout" title="' . s(get_string('pdfviewer_zoomout', 'block_exaport')) . '">&minus;</button>' .
+        '<span class="exaport-pdf-zoomlevel">100%</span>' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-zoomin" title="' . s(get_string('pdfviewer_zoomin', 'block_exaport')) . '">+</button>' .
+        '<button type="button" class="exaport-pdf-btn exaport-pdf-zoomreset" title="' . s(get_string('pdfviewer_zoomreset', 'block_exaport')) . '">' . s(get_string('pdfviewer_fit', 'block_exaport')) . '</button>' .
+        '</span>' .
         '<a class="exaport-pdf-btn exaport-pdf-download" href="' . $ffurl . '" target="_blank" rel="noopener">' .
         get_string('download') . '</a>' .
         '</div>' .
+        ($canannotate ?
+            '<div class="exaport-pdf-drawtoolbar">' .
+            '<span class="exaport-pdf-toolgroup" role="group">' .
+            '<button type="button" class="exaport-pdf-btn exaport-pdf-tool is-active" data-tool="comment" title="' . s(get_string('pdfannotation_tool_comment', 'block_exaport')) . '">&#128172;</button>' .
+            '<button type="button" class="exaport-pdf-btn exaport-pdf-tool" data-tool="highlight" title="' . s(get_string('pdfannotation_tool_highlight', 'block_exaport')) . '">&#9635;</button>' .
+            '<button type="button" class="exaport-pdf-btn exaport-pdf-tool" data-tool="pen" title="' . s(get_string('pdfannotation_tool_pen', 'block_exaport')) . '">&#9998;</button>' .
+            '</span>' .
+            '<input type="color" class="exaport-pdf-colorpicker" value="#ffe066" title="' . s(get_string('pdfannotation_colour', 'block_exaport')) . '">' .
+            '<span class="exaport-pdf-toolhint">' . s(get_string('pdfannotation_hint', 'block_exaport')) . '</span>' .
+            '</div>'
+        : '') .
         '<div class="exaport-pdf-body">' .
         '<div class="exaport-pdf-canvaswrap">' .
         '<canvas class="exaport-pdf-canvas"></canvas>' .
+        '<svg class="exaport-pdf-pensvg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>' .
         '<div class="exaport-pdf-annotlayer"></div>' .
         '</div>' .
         '<div class="exaport-pdf-sidebar">' .
         '<h5>' . get_string('pdfannotations', 'block_exaport') . '</h5>' .
+        (!$canannotate ? '<p class="exaport-pdf-hint">' . s(get_string('pdfannotation_viewonly', 'block_exaport')) . '</p>' : '') .
         '<ul class="exaport-pdf-annotlist"></ul>' .
         '</div>' .
         '</div>' .

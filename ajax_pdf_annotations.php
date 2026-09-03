@@ -56,14 +56,32 @@ try {
             require_sesskey();
             $annotation = $manager->save_annotation([
                 'page' => required_param('page', PARAM_INT),
-                'x' => required_param('x', PARAM_FLOAT),
-                'y' => required_param('y', PARAM_FLOAT),
+                'x' => optional_param('x', 0, PARAM_FLOAT),
+                'y' => optional_param('y', 0, PARAM_FLOAT),
                 'width' => optional_param('width', null, PARAM_FLOAT),
                 'height' => optional_param('height', null, PARAM_FLOAT),
                 'type' => optional_param('type', 'comment', PARAM_ALPHA),
                 'colour' => optional_param('colour', '#ffe066', PARAM_TEXT),
-                'content' => required_param('content', PARAM_TEXT),
+                'content' => optional_param('content', '', PARAM_TEXT),
+                'pathdata' => optional_param('pathdata', null, PARAM_RAW),
             ]);
+            echo json_encode(['success' => true, 'annotation' => $annotation]);
+            break;
+
+        case 'update':
+            require_sesskey();
+            $update = [];
+            foreach (['x', 'y', 'width', 'height'] as $key) {
+                $val = optional_param($key, null, PARAM_FLOAT);
+                if ($val !== null) {
+                    $update[$key] = $val;
+                }
+            }
+            $pathdata = optional_param('pathdata', null, PARAM_RAW);
+            if ($pathdata !== null) {
+                $update['pathdata'] = $pathdata;
+            }
+            $annotation = $manager->update_annotation(required_param('id', PARAM_INT), $update);
             echo json_encode(['success' => true, 'annotation' => $annotation]);
             break;
 
