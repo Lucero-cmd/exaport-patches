@@ -338,7 +338,7 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
 
     $html = $assets .
         '<div class="exaport-pdf-viewer" id="' . $viewerid . '"' .
-        ' data-pdf-url="' . s($ffurl) . '"' .
+        ' data-pdf-url="' . $ffurl . '"' .
         ' data-ajax-url="' . s($CFG->wwwroot . '/blocks/exaport/ajax_pdf_annotations.php') . '"' .
         ' data-item-id="' . (int)$item->id . '"' .
         ' data-access="' . s($access) . '"' .
@@ -362,7 +362,7 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
         '<span class="exaport-pdf-pageindicator"><span class="exaport-pdf-pagenum">1</span> / ' .
         '<span class="exaport-pdf-pagecount">-</span></span>' .
         '<button type="button" class="exaport-pdf-btn exaport-pdf-next">' . get_string('next') . ' &rarr;</button>' .
-        '<a class="exaport-pdf-btn exaport-pdf-download" href="' . s($ffurl) . '" target="_blank" rel="noopener">' .
+        '<a class="exaport-pdf-btn exaport-pdf-download" href="' . $ffurl . '" target="_blank" rel="noopener">' .
         get_string('download') . '</a>' .
         '</div>' .
         '<div class="exaport-pdf-body">' .
