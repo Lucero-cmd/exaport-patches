@@ -322,7 +322,7 @@
 .exaport-pdf-popup {
     position: absolute;
     z-index: 20;
-    width: 240px;
+    width: 280px;
     background: #fff;
     border: 1px solid #c7ccd1;
     border-radius: 4px;
@@ -332,10 +332,15 @@
 
 .exaport-pdf-popup textarea {
     width: 100%;
-    min-height: 60px;
+    min-height: 80px;
     resize: vertical;
     box-sizing: border-box;
     font-size: 0.85rem;
+    font-family: inherit;
+    line-height: 1.4;
+    padding: 6px;
+    white-space: pre-wrap; /* override any theme reset that collapses newlines/wrapping on textareas */
+    overflow-wrap: break-word;
 }
 
 .exaport-pdf-popup .exaport-pdf-popup-actions {

@@ -714,7 +714,7 @@
         var wrapRect = this.canvas.parentNode.getBoundingClientRect();
         var left = clientX - wrapRect.left + this.canvas.parentNode.scrollLeft;
         var top = clientY - wrapRect.top + this.canvas.parentNode.scrollTop;
-        var maxLeft = this.canvas.parentNode.scrollWidth - 250;
+        var maxLeft = this.canvas.parentNode.scrollWidth - 290; // keep the (now 280px-wide) popup on-screen
         popup.style.left = Math.max(0, Math.min(left, maxLeft)) + 'px';
         popup.style.top = Math.max(0, top) + 'px';
     };
