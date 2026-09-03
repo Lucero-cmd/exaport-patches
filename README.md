@@ -1,4 +1,50 @@
-# exaport: Exabis E-Portfolio
+# exaport-patches
+
+This is a patched fork of **Exabis ePortfolio** (`block_exaport`) for Moodle, maintained for
+Alex D&D Training's own site. It tracks the upstream plugin plus a set of local customizations
+that are **not** part of the official Exabis release and would be lost if the official plugin
+update is ever installed over this code (see [Deployment notes](#deployment-notes) below).
+
+## What's different from upstream
+
+- **Company manager role support** — the `companymanager` role can see its own company's
+  teachers throughout the plugin (`lib/lib.php`), a local customization not present upstream.
+- **Inline PDF viewer** — PDF item files render inline with page navigation and zoom instead of
+  forcing a download (`lib/lib.php`, `lib/externlib.php`, `css/pdf_annotate.css`,
+  `javascript/pdfviewer/pdf_annotate.js`). Uses [pdf.js](https://mozilla.github.io/pdf.js/),
+  loaded from a CDN and run in an isolated execution scope to avoid colliding with Moodle's own
+  RequireJS (see the comment above the asset-loading code in `lib/lib.php` for why).
+- **PDF markup/annotation tools** — comment pins, drag-drawn highlight boxes, and freehand pen
+  strokes can be added directly on top of a PDF page, with a colour picker, zoom, drag-to-move,
+  and resize (highlights). Backed by a new DB table (`block_exaport_pdfannot`), a new AJAX
+  endpoint (`ajax_pdf_annotations.php`), and a new capability (`block/exaport:annotatepdf`,
+  granted by default to teacher/editingteacher/manager — **not** `companymanager`, which needs
+  manual capability assignment if that role should be able to mark up PDFs too).
+
+See `CHANGES.md` for the detailed, dated changelog of each patch.
+
+## Deployment notes
+
+- Staging deploys via `git pull` directly into `blocks/exaport` on the server (not a manual
+  file copy) — see the repo's commit history for the exact sequence this was set up with.
+- After any `git pull` that touches the DB schema (new tables/fields), run Moodle's upgrade
+  step: `php <moodle-root>/admin/cli/upgrade.php --non-interactive`, then
+  `php <moodle-root>/admin/cli/purge_caches.php`.
+- **Do not install the official Exabis ePortfolio update from Site administration → Plugins**
+  on any site running this fork — the official release does not include the customizations
+  above, and installing it will silently overwrite this code. If Moodle shows an update is
+  available, that means there's a new upstream release worth reviewing and merging in
+  deliberately (diff it against the current upstream, reconcile with the local changes, test on
+  staging), not something to install directly through the notifications page.
+- Some files on the live staging server were, for a period, locked read-only
+  (`chmod 444`) as a precaution after files were repeatedly and unexplainedly reverted to an
+  older version. If those files are still locked when you go to deploy an update, run
+  `chmod 644` on them first, `git pull`, then decide whether to re-lock.
+
+## Original plugin documentation (upstream)
+
+The rest of this README is Exabis's own documentation for the base plugin, kept for reference.
+
 
 exaport is a free Moodle plugin designed to build up ePortfolios with an individual structure. Students can create, collect and share outcomes of their learning process in the form of a digital portfolio.
 This module enables the following functionality:
