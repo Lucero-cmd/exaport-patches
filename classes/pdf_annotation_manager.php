@@ -46,10 +46,13 @@ class pdf_annotation_manager {
     /**
      * Can the current user create/mark up annotations on this item's PDF?
      *
+     * Delegates to block_exaport_can_annotate_pdf() (defined in lib/lib.php) so the same
+     * system-context-or-item's-course-context logic applies everywhere this is checked.
+     *
      * @return bool
      */
     public function can_annotate(): bool {
-        return has_capability('block/exaport:annotatepdf', \context_system::instance());
+        return block_exaport_can_annotate_pdf($this->item);
     }
 
     /**
@@ -58,7 +61,7 @@ class pdf_annotation_manager {
      * @return bool
      */
     protected function can_manage_all(): bool {
-        return has_capability('block/exaport:annotatepdf', \context_system::instance());
+        return block_exaport_can_annotate_pdf($this->item);
     }
 
     /**
