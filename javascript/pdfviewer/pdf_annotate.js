@@ -2,8 +2,10 @@
  *
  * Renders each ".exaport-pdf-viewer" container using pdf.js and overlays
  * click-to-comment pins / drag-to-highlight markers backed by
- * ajax_pdf_annotations.php. Vanilla JS, no build step - loaded directly via
- * $PAGE->requires->js() from lib/lib.php::block_exaport_render_pdf_viewer().
+ * ajax_pdf_annotations.php. Vanilla JS, no build step - loaded via a plain
+ * <script> tag emitted inline by lib/lib.php::block_exaport_render_pdf_viewer(),
+ * since this renders deep in the page body where Moodle's $PAGE->requires
+ * queue is unreliable.
  */
 (function () {
     'use strict';
@@ -11,7 +13,7 @@
     var PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     var DRAG_THRESHOLD = 8; // px, below this a pointer down/up pair counts as a "click" (pin), not a drag (highlight).
 
-    function whenPdfJsReady(callback, attemptsLeft) {
+    function whenPdfJsReady(callback, onTimeout, attemptsLeft) {
         if (typeof window.pdfjsLib !== 'undefined') {
             if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
                 window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
@@ -21,10 +23,13 @@
         }
         attemptsLeft = attemptsLeft === undefined ? 25 : attemptsLeft;
         if (attemptsLeft <= 0) {
+            if (onTimeout) {
+                onTimeout();
+            }
             return;
         }
         window.setTimeout(function () {
-            whenPdfJsReady(callback, attemptsLeft - 1);
+            whenPdfJsReady(callback, onTimeout, attemptsLeft - 1);
         }, 200);
     }
 
@@ -155,6 +160,8 @@
             }).catch(function (err) {
                 self.showLoadError(err);
             });
+        }, function () {
+            self.showLoadError(new Error('pdf.js library failed to load (CDN blocked or unreachable?)'));
         });
     };
 

@@ -308,14 +308,27 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
     static $counter = 0;
     $counter++;
 
+    // pdf.js is loaded from a CDN to avoid bundling a multi-megabyte binary with the
+    // plugin; for offline/air-gapped installs, download pdf.min.js + pdf.worker.min.js
+    // from https://mozilla.github.io/pdf.js/ into javascript/pdfviewer/vendor/ and
+    // update the two script URLs below to point there instead.
+    //
+    // NOTE: this function runs deep inside item rendering, well after $OUTPUT->header()
+    // has already printed <head>. Moodle's $PAGE->requires->css()/js() queues are meant
+    // to be populated before the header is sent; css() throws a coding_exception if used
+    // too late, and js() was found to silently not emit the tag in practice here. So both
+    // the stylesheet and the two scripts are emitted directly as plain HTML tags in the
+    // string this function returns, exactly where the viewer itself renders - no reliance
+    // on Moodle's requirements manager at all.
+    $assets = '';
     if (!$assetsloaded) {
-        // pdf.js is loaded from a CDN to avoid bundling a multi-megabyte binary with the
-        // plugin; for offline/air-gapped installs, download pdf.min.js + pdf.worker.min.js
-        // from https://mozilla.github.io/pdf.js/ into javascript/pdfviewer/vendor/ and
-        // update the two script URLs below to point there instead.
-        $PAGE->requires->css('/blocks/exaport/css/pdf_annotate.css');
-        $PAGE->requires->js(new moodle_url('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'), true);
-        $PAGE->requires->js(new moodle_url('/blocks/exaport/javascript/pdfviewer/pdf_annotate.js'), true);
+        $cssurl = new moodle_url('/blocks/exaport/css/pdf_annotate.css');
+        $pdfjsurl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        $viewerjsurl = new moodle_url('/blocks/exaport/javascript/pdfviewer/pdf_annotate.js');
+
+        $assets .= '<link rel="stylesheet" type="text/css" href="' . $cssurl->out() . '">';
+        $assets .= '<script src="' . s($pdfjsurl) . '"></script>';
+        $assets .= '<script src="' . $viewerjsurl->out() . '"></script>';
         $assetsloaded = true;
     }
 
@@ -323,7 +336,8 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
     $filehash = $file->get_pathnamehash();
     $canannotate = has_capability('block/exaport:annotatepdf', context_system::instance());
 
-    $html = '<div class="exaport-pdf-viewer" id="' . $viewerid . '"' .
+    $html = $assets .
+        '<div class="exaport-pdf-viewer" id="' . $viewerid . '"' .
         ' data-pdf-url="' . s($ffurl) . '"' .
         ' data-ajax-url="' . s($CFG->wwwroot . '/blocks/exaport/ajax_pdf_annotations.php') . '"' .
         ' data-item-id="' . (int)$item->id . '"' .
