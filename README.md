@@ -41,6 +41,98 @@ See `CHANGES.md` for the detailed, dated changelog of each patch.
   older version. If those files are still locked when you go to deploy an update, run
   `chmod 644` on them first, `git pull`, then decide whether to re-lock.
 
+### File permission lock (staging)
+
+The plugin's PDF viewer/annotation files on staging are kept read-only (`chmod 444`) as a
+standing precaution. Something on the host has silently reverted these specific files back to
+an old version on multiple separate occasions — through several rounds of investigation we ruled
+out Moodle's own plugin auto-update mechanism, PHP opcache (both in-memory and the on-disk
+`file_cache_only` mode at `~/.opcache`), Moodle's string/component caches, a malware/integrity
+scanner (host confirmed none), and a misconfigured git remote, without ever conclusively
+identifying the real cause. The leading suspect that's never been fully ruled out: a
+backup/restore tool (possibly tied to the account's own automated backups) restoring from a
+snapshot taken close to `2026-09-02 16:45` - every observed revert has restored byte-identical
+content with that exact preserved file-modified timestamp, which is consistent with a
+`tar`/`rsync`-style restore (these preserve original mtimes; a plain `git checkout` of an old
+commit would not) rather than a live re-fetch from any source we've checked. **Root cause is
+still not confirmed as of this writing** - the lock is a mitigation, not a fix. See the
+"catching it in the act" notes below if this needs picking back up.
+
+**Important:** the lock only protects whatever content is on disk *at the moment you apply it*.
+If a file has already reverted before you run `chmod 444`, you lock in the broken version. Always
+`grep` for something you know should be in the file (e.g. a recent string addition) immediately
+before locking, not just after - this bit us once already.
+
+**Locked files:**
+```
+lib.php
+lib/lib.php
+lang/en/block_exaport.php
+lang/de/block_exaport.php
+javascript/pdfviewer/pdf_annotate.js
+css/pdf_annotate.css
+classes/pdf_annotation_manager.php
+ajax_pdf_annotations.php
+```
+
+**Before deploying any change that touches one of these files**, unlock, pull, verify, then
+re-lock:
+
+```bash
+cd blocks/exaport
+chmod 644 lib.php lib/lib.php lang/en/block_exaport.php lang/de/block_exaport.php \
+  javascript/pdfviewer/pdf_annotate.js css/pdf_annotate.css \
+  classes/pdf_annotation_manager.php ajax_pdf_annotations.php
+git pull
+# verify the pull actually landed correctly before locking - e.g.:
+grep -c "some-string-you-just-added" lang/en/block_exaport.php
+chmod 444 lib.php lib/lib.php lang/en/block_exaport.php lang/de/block_exaport.php \
+  javascript/pdfviewer/pdf_annotate.js css/pdf_annotate.css \
+  classes/pdf_annotation_manager.php ajax_pdf_annotations.php
+php /path/to/moodle/admin/cli/purge_caches.php
+```
+
+Forgetting the `chmod 644` step first will make `git pull` fail outright with a permission
+error on any locked file the incoming changes need to touch.
+
+### Catching the revert in the act (unfinished investigation)
+
+If this needs to be tracked down properly rather than just locked around, the next steps that
+haven't been tried yet:
+
+- **Broaden the search beyond `blocks/exaport`.** Every investigation so far has watched only
+  the plugin's own files. Run `find ~/www -newer <a freshly-touched marker file> -mmin -60` (or
+  similar) periodically to see whether *other*, unrelated files elsewhere in the account change
+  at the same moment a revert happens - if so, this points to an account-wide backup/restore
+  event rather than anything exaport- or Moodle-specific.
+- **`inotifywait` (if available)** on `blocks/exaport` would show the exact moment of any write,
+  which at minimum pins down precise timing to correlate against hosting-panel activity/backup
+  logs, even without seeing which process did it.
+- **Ask the host directly** (SGVPS, not SiteGround - the account this plugin lives on) whether
+  any account-level automated backup/restore, snapshot, or staging-sync feature is active and
+  whether it can be scoped to exclude `blocks/exaport`, or paused entirely while this is being
+  worked on.
+- Note: SiteGround's own cache (see below) was investigated and ruled out as the cause of the
+  *file* reverting - it only affects what's displayed in a browser, not the actual bytes on disk
+  (confirmed via direct SSH `grep`/`stat`, independent of any browser or CDN). It's a real,
+  separate issue worth checking first for *display* staleness, but it is not the same problem as
+  the file-revert issue described above.
+
+### If a change doesn't seem to take effect: check SiteGround's cache first
+
+Before assuming a deploy failed, a fix reverted, or chasing Moodle/PHP-level caching (opcache,
+Moodle's string cache, Moodle's `cache`/`localcache` dataroot folders), **check SiteGround's own
+server-side caching layer** (SuperCacher or similar, likely operating as a CDN/reverse-proxy in
+front of the domain rather than on the origin VPS itself) — it sits in front of everything else
+and caches full rendered HTML pages, including error pages, independent of the actual site
+content. This was the actual cause of an extended debugging session that looked exactly like a
+reverted file (identical error, persisting through a fresh incognito browser, through every
+Moodle/PHP cache we cleared) - clearing it from the SiteGround/hosting panel resolved it
+immediately. `curl -sI <url> | grep -i cache` from the server can help confirm a caching proxy is
+in the response path (look for `x-proxy-cache-info` or similar headers), but the fastest check is
+simply: clear SiteGround's cache first, before spending time on anything else. This is a
+*separate* issue from the file-permission-lock section above - see the note there.
+
 ## Original plugin documentation (upstream)
 
 The rest of this README is Exabis's own documentation for the base plugin, kept for reference.
