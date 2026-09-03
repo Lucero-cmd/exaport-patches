@@ -301,6 +301,34 @@ function block_exaport_print_file(stored_file $file) {
  * @param string $ffurl URL to fetch the raw PDF bytes from (portfoliofile.php)
  * @return string HTML
  */
+/**
+ * Can the current user mark up (annotate) this item's PDF?
+ *
+ * Checks the block/exaport:annotatepdf capability at system context (covers site
+ * admins/managers assigned there) OR at the item's own course context when it has one
+ * (covers the normal case: a teacher holding the Teacher/Editing teacher role via course
+ * enrolment, which does NOT grant system-context capabilities in Moodle's permission model -
+ * course-level role assignments only apply to that course and its children, they don't
+ * propagate up to system context). Many exaport items have courseid = 0 (personal portfolio
+ * artifacts not tied to a specific course), in which case only the system-context check
+ * applies.
+ *
+ * @param \stdClass $item exaport item, may have ->courseid
+ * @return bool
+ */
+function block_exaport_can_annotate_pdf($item) {
+    if (has_capability('block/exaport:annotatepdf', context_system::instance())) {
+        return true;
+    }
+    if (!empty($item->courseid)) {
+        $coursecontext = context_course::instance($item->courseid, IGNORE_MISSING);
+        if ($coursecontext && has_capability('block/exaport:annotatepdf', $coursecontext)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffurl) {
     global $CFG, $PAGE;
 
@@ -365,7 +393,7 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
 
     $viewerid = 'exaport_pdfviewer_' . (int)$item->id . '_' . $counter;
     $filehash = $file->get_pathnamehash();
-    $canannotate = has_capability('block/exaport:annotatepdf', context_system::instance());
+    $canannotate = block_exaport_can_annotate_pdf($item);
 
     $html = $assets .
         '<div class="exaport-pdf-viewer" id="' . $viewerid . '"' .
