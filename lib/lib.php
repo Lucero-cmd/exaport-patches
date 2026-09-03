@@ -320,6 +320,15 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
     // the stylesheet and the two scripts are emitted directly as plain HTML tags in the
     // string this function returns, exactly where the viewer itself renders - no reliance
     // on Moodle's requirements manager at all.
+    //
+    // pdf.js also self-registers as an AMD module via a global define() call if it
+    // detects an AMD loader on the page - which collides with Moodle's own RequireJS and
+    // breaks core navigation (manifests as "Uncaught Error: No define call for core/first"
+    // and the primary nav/drawer disappearing). To avoid that, pdf.js is loaded via a
+    // small inline bootstrap script that hides window.define while pdf.js's script runs,
+    // forcing it to fall back to a plain global (window.pdfjsLib) instead of registering
+    // as an AMD module, then restores window.define immediately afterwards so Moodle's
+    // own module loading is unaffected.
     $assets = '';
     if (!$assetsloaded) {
         $cssurl = new moodle_url('/blocks/exaport/css/pdf_annotate.css');
@@ -327,8 +336,20 @@ function block_exaport_render_pdf_viewer($item, $access, stored_file $file, $ffu
         $viewerjsurl = new moodle_url('/blocks/exaport/javascript/pdfviewer/pdf_annotate.js');
 
         $assets .= '<link rel="stylesheet" type="text/css" href="' . $cssurl->out() . '">';
-        $assets .= '<script src="' . s($pdfjsurl) . '"></script>';
-        $assets .= '<script src="' . $viewerjsurl->out() . '"></script>';
+        $assets .= '<script>(function() {' .
+            'var exaportAmdBackup = window.define;' .
+            'window.define = undefined;' . // hide RequireJS from pdf.js so it self-attaches as window.pdfjsLib.
+            'var s1 = document.createElement("script");' .
+            's1.src = ' . json_encode($pdfjsurl) . ';' .
+            's1.onload = function() {' .
+                'window.define = exaportAmdBackup;' . // restore RequireJS for the rest of the page.
+                'var s2 = document.createElement("script");' .
+                's2.src = ' . json_encode($viewerjsurl->out(false)) . ';' .
+                'document.body.appendChild(s2);' .
+            '};' .
+            's1.onerror = function() { window.define = exaportAmdBackup; };' .
+            'document.body.appendChild(s1);' .
+        '})();</script>';
         $assetsloaded = true;
     }
 
